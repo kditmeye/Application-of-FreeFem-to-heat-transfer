@@ -1,0 +1,127 @@
+// file thermal.edp
+
+//paramètres de calcul
+real Ts=10e6 ;//sec  %1418000 %10e6 %859200 
+real dt=6000 ;
+real epsilon=10e-5;
+real Tt;
+real qtop;
+real qcyl;
+real qtopold;
+real qtot;
+real Toldt;
+real tstat;
+
+//coefficients
+real k=0.5 ;//thermal conductivity Wm-1/k-1
+real Cp=920 ;//heat capacity Jkg-1K-1
+real rho=2400 ;// volumetric mass kgm-3
+real alpha=0;
+
+//calcul of Thermal conductivity
+func D=k/(rho*Cp) ;
+
+//boundary conditions
+real Tupp=310 ;// Kelvin
+real Theateltm=400 ;//Kelvin
+real v0=0 ;//velocity because of the symmetry condition
+
+//initial condition
+real T0=310 ;//Kelvin
+
+//paramètres de la géométrie
+real L = 1.2;
+real Diam=0.3;
+real Lx=(1.2)/2;
+real Ly = 1.8/2;
+
+
+//définition de la géométrie
+
+border c1 ( t=0,1)    {x=Diam/2+t*(Lx-Diam/2); y=0;}
+border c2 ( t=0,1)    {x=Lx; y=t*Ly;}
+border c3 ( t=1,0)    {x=t*Lx; y=Ly;}
+border c4 ( t=1,0)    {x=0; y=Diam/2+t*(Ly-Diam/2);}
+border c5 ( t=pi/2,0) {x=Diam/2*cos(t); y=Diam/2*sin(t);}
+
+//  Create the mesh.
+
+mesh Th = buildmesh 
+(
+  //c1(20)+c2(45)+c3(30)+c4(30)+c5(40) //low number of nodes
+  c1(45)+c2(90)+c3(60)+c4(75)+c5(80)   //high number of nodes
+  );
+
+//plot Mesh
+plot ( Th, ps = "exo2-maillage.eps" );
+
+//définition des espaces d'approximation
+fespace Vh(Th,P1);
+
+//définition des données du problème
+Vh T=T0,v,Told;
+
+//définition du problème sur Th
+
+problem thermic(T,v)= int2d(Th)(T*v/dt + D*(dx(T) * dx(v) + dy(T) * dy(v)))
+					 +int1d(Th,c1,c2,c4) (alpha*T*v) //boundary condition with dt
+                     -int2d(Th)(Told*v/dt) +on(c3,T=Tupp)+on(c5,T=Theateltm);
+                     
+
+
+
+
+//écriture dans le fichier thermic.dat des valeurs d'un point
+//string fffile="exo2.dat";
+//ofstream ff(ff,append);
+ofstream ff("exo2.dat");
+ofstream hh("exo2-qtop.dat");
+qtopold=0;
+for(real t=0;t<Ts;t+=dt){
+    Told=T;
+    // Activate to adapt Mesh
+    //Th=adaptmesh(Th,T,err=1.e-2);
+	//plot(Th,cmm="Adapted Mesh", ps = "exo2-adapt-maillage.eps");
+    
+    //boucle d'arret de l'affichage si la solution converge (en un point)
+    if (abs(T(0.3,0.5)-Toldt)>epsilon) {
+	Toldt=T(0.3,0.5);
+    
+    thermic;  
+	// affichage de l'évolution de la temperature en fonction des itérations	
+    plot(T,value=true);
+    // calcul de l'énergie tranferée "Fourrier rate equation"
+    qtop=int1d(Th,c3)((-D)*dx(T)*N.x+(-D)*dy(T)*N.y);
+    qcyl=int1d(Th,c5)((-D)*dx(T)*N.x+(-D)*dy(T)*N.y);
+    // calcul de l'énergie totale tranferée 
+    qtot=qtop+qtopold;
+    qtopold=qtop;
+    
+    //ecriture des valeurs dans les fichiers
+    ff<<t/60/60/24<<" " <<T(0.3,0.5)<<endl;
+    hh<<t<<" " <<qtop<<endl;
+    
+    //ecriture dans la cmd des infomations de calculs
+    cout << " "<< "\n";
+    cout << "-------------------------------------------------------------------"<< "\n";
+    cout << "Pas de temps :" << t << " / "<< Ts << "\n";
+    cout << "Epsilon :" << T(0.3,0.5)-Toldt << " / "<< epsilon<< "\n";
+    cout << "qtop :" <<qtop << "  qcyl :" <<qcyl <<"  qtot :"<<qtot<<"\n";
+    cout << "-------------------------------------------------------------------"<< "\n";
+	}
+	
+	 //if ((Ts-dt)<t) {	
+	 //plot(T,fill=true,value=true,wait=true,ps="exo2-Ts.eps");	
+	 //					}
+    else { 
+	//si converge :affichage de la solution finale 
+	plot(T,fill=true,value=true,wait=true,ps="exo2-Tstat.eps");	
+	tstat=t;
+	break;
+		 }
+	
+	
+}
+   plot(T,fill=true,value=true,wait=true,ps="exo2-Ts.eps");
+
+
